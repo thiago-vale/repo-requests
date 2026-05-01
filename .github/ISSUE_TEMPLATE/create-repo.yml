@@ -14,9 +14,9 @@ body:
     attributes:
       label: Template base
       options:
-        - thiago-vale/glue_template
-        - thiago-vale/glue_template
-        - thiago-vale/glue_template
+        - glue_template
+        - lambda_template
+        - emr_template
 
   - type: dropdown
     id: visibility
