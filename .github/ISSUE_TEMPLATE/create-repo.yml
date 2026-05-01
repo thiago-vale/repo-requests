@@ -9,7 +9,6 @@ body:
     validations:
       required: true
 
-
   - type: dropdown
     id: template
     attributes:
