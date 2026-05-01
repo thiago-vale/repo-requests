@@ -9,13 +9,99 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Create repo from template
+      # 1. Extrair dados da issue
+      - name: Extract issue data
+        id: extract
+        uses: actions/github-script@v7
+        with:
+          result-encoding: string
+          script: |
+            const body = context.payload.issue.body;
+
+            function getValue(label) {
+              const regex = new RegExp(label + ".*\\n(.*)");
+              const match = body.match(regex);
+              return match ? match[1].trim() : "";
+            }
+
+            const repo_name = getValue("Nome do repositório");
+            const template = getValue("Template base");
+            const description = getValue("Descrição");
+            const visibility = getValue("Visibilidade");
+
+            core.setOutput("repo_name", repo_name);
+            core.setOutput("template", template);
+            core.setOutput("description", description);
+            core.setOutput("visibility", visibility);
+
+      # 2. Validar dados básicos
+      - name: Validate inputs
         run: |
-          curl -X POST \
-          -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
-          -H "Accept: application/vnd.github+json" \
-          https://api.github.com/repos/ORG/TEMPLATE_REPO/generate \
-          -d '{
-            "name": "novo-repo",
-            "private": true
-          }'
+          if [ -z "${{ steps.extract.outputs.repo_name }}" ]; then
+            echo "Nome do repositório é obrigatório"
+            exit 1
+          fi
+
+          if [ -z "${{ steps.extract.outputs.template }}" ]; then
+            echo "Template é obrigatório"
+            exit 1
+          fi
+
+      # 3. Criar repo a partir do template
+      - name: Create repository
+        id: create_repo
+        run: |
+          TEMPLATE="${{ steps.extract.outputs.template }}"
+          VISIBILITY="${{ steps.extract.outputs.visibility }}"
+          
+          if [ "$VISIBILITY" = "public" ]; then
+            PRIVATE=false
+          else
+            PRIVATE=true
+          fi
+
+          RESPONSE=$(curl -s -o response.json -w "%{http_code}" \
+            -X POST \
+            -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/thiago-vale/$TEMPLATE/generate \
+            -d "{
+              \"name\": \"${{ steps.extract.outputs.repo_name }}\",
+              \"private\": $PRIVATE,
+              \"description\": \"${{ steps.extract.outputs.description }}\"
+            }")
+
+          echo "status=$RESPONSE" >> $GITHUB_OUTPUT
+
+          if [ "$RESPONSE" -ne 201 ]; then
+            echo "Erro ao criar repositório"
+            cat response.json
+            exit 1
+          fi
+
+      # 4. Comentar na issue (sucesso)
+      - name: Comment success
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const repo = "${{ steps.extract.outputs.repo_name }}";
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `Repositório criado com sucesso:\nhttps://github.com/thiago-vale/${repo}`
+            });
+
+      # 5. Comentar erro
+      - name: Comment failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `Erro ao criar repositório. Verifique os logs da Action.`
+            });
