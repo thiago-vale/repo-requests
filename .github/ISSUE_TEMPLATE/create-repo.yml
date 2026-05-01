@@ -1,0 +1,23 @@
+name: Criar novo repositório
+description: Solicitação de novo serviço
+
+body:
+  - type: input
+    id: repo_name
+    attributes:
+      label: Nome do repositório
+    validations:
+      required: true
+
+  - type: dropdown
+    id: visibility
+    attributes:
+      label: Visibilidade
+      options:
+        - private
+        - public
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Descrição
